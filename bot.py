@@ -69,6 +69,8 @@ def format_contact(c: dict, index: int) -> str:
         lines.append(f"📞 {c['Телефон']}")
     if c.get('Сейлз'):
         lines.append(f"👤 Сейлз: {c['Сейлз']}")
+    if c.get('Дата'):
+        lines.append(f"🗓 {c['Дата']}")
     if c.get('Источник'):
         lines.append(f"📅 {c['Источник']}")
     if c.get('Не звонить') == 'ДА':
