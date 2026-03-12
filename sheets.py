@@ -9,13 +9,11 @@ COLUMNS = ["Имя", "Фамилия", "Email", "Телефон", "Компан�
            "Сейлз", "Дата", "Источник", "Запрос", "Не звонить"]
 
 def load_contacts(spreadsheet_id: str) -> list[dict]:
-    # Читаем credentials из переменной окружения
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if creds_json:
         creds_info = json.loads(creds_json)
         creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     else:
-        # Fallback на файл
         creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
         creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
 
@@ -32,5 +30,8 @@ def load_contacts(spreadsheet_id: str) -> list[dict]:
     for row in values:
         row += [""] * (len(COLUMNS) - len(row))
         contact = dict(zip(COLUMNS, row))
+        # Обрезаем время из даты: "2025-12-05 12:24:51" → "2025-12-05"
+        if contact.get("Дата"):
+            contact["Дата"] = str(contact["Дата"]).split(" ")[0]
         contacts.append(contact)
     return contacts
