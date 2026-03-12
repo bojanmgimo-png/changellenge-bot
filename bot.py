@@ -153,18 +153,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     total = len(results)
-    show = results[:10]
     header = f"✅ Найдено: *{total}* контакт{'ов' if total != 1 else ''}:\n\n"
-    cards = "\n\n---\n\n".join(format_contact(c, i+1) for i, c in enumerate(show))
-    footer = f"\n\n_Показаны первые 10 из {total}. Уточни запрос для фильтрации._" if total > 10 else ""
-    message = header + cards + footer
 
-    if len(message) > 4000:
-        await update.message.reply_text(header + f"Результатов много ({total}), отправляю по частям...", parse_mode="Markdown")
-        for i, c in enumerate(show):
-            await update.message.reply_text(format_contact(c, i+1), parse_mode="Markdown")
-    else:
-        await update.message.reply_text(message, parse_mode="Markdown")
+    # Отправляем все контакты по частям (Telegram лимит 4096 символов)
+    await update.message.reply_text(header, parse_mode="Markdown")
+    
+    batch = ""
+    for i, c in enumerate(results):
+        card = format_contact(c, i+1) + "\n\n---\n\n"
+        if len(batch) + len(card) > 3800:
+            await update.message.reply_text(batch, parse_mode="Markdown")
+            batch = card
+        else:
+            batch += card
+    
+    if batch:
+        await update.message.reply_text(batch, parse_mode="Markdown")
 
 async def post_init(app):
     """Загружаем базу при старте бота."""
