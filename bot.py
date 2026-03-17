@@ -18,7 +18,6 @@ ALLOWED_USERS = set(map(int, os.environ.get("ALLOWED_USERS", "").split(","))) if
 
 anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# Кэш контактов
 _contacts_cache = None
 _cache_time = 0
 
@@ -57,22 +56,29 @@ def parse_query_with_claude(user_message: str) -> dict:
     except Exception:
         return {}
 
+def safe(text: str) -> str:
+    """Убирает символы которые ломают Markdown в Telegram."""
+    if not text:
+        return ""
+    return text.replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+
 def format_contact(c: dict, index: int) -> str:
-    lines = [f"*{index}. {c.get('Имя','')} {c.get('Фамилия','')}*".strip()]
+    name = safe(f"{c.get('Имя','')} {c.get('Фамилия','')}".strip())
+    lines = [f"*{index}. {name}*"]
     if c.get('Компания') and c['Компания'] not in ['-', '']:
-        lines.append(f"🏢 {c['Компания']}")
+        lines.append(f"🏢 {safe(c['Компания'])}")
     if c.get('Должность') and c['Должность'] not in ['-', '']:
-        lines.append(f"💼 {c['Должность']}")
+        lines.append(f"💼 {safe(c['Должность'])}")
     if c.get('Email'):
-        lines.append(f"📧 {c['Email']}")
+        lines.append(f"📧 {safe(c['Email'])}")
     if c.get('Телефон'):
-        lines.append(f"📞 {c['Телефон']}")
+        lines.append(f"📞 {safe(c['Телефон'])}")
     if c.get('Сейлз'):
-        lines.append(f"👤 Сейлз: {c['Сейлз']}")
+        lines.append(f"👤 Сейлз: {safe(c['Сейлз'])}")
     if c.get('Дата'):
-        lines.append(f"🗓 {c['Дата']}")
+        lines.append(f"🗓 {safe(c['Дата'])}")
     if c.get('Источник'):
-        lines.append(f"📅 {c['Источник']}")
+        lines.append(f"📅 {safe(c['Источник'])}")
     if c.get('Не звонить') == 'ДА':
         lines.append("⛔️ *НЕ ЗВОНИТЬ*")
     return "\n".join(lines)
@@ -87,13 +93,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👋 Привет! Я помогаю искать контакты из B2B базы Changellenge.\n"
         f"📊 В базе {len(contacts)} контактов.\n\n"
         "Просто напиши что ищешь, например:\n"
-        "• *Найди контакты из компании Лента*\n"
-        "• *Где работает Михаил Иванов*\n"
-        "• *HR-директора из Газпрома*\n\n"
+        "• Найди контакты из компании Лента\n"
+        "• Где работает Михаил Иванов\n"
+        "• HR-директора из Газпрома\n\n"
         "Команды:\n"
         "/start — это сообщение\n"
-        "/reload — обновить базу",
-        parse_mode="Markdown"
+        "/reload — обновить базу"
     )
 
 async def reload(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,7 +127,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Ищу...")
 
     try:
-        # Парсим запрос через Claude с таймаутом 10 сек
         params = await asyncio.wait_for(
             asyncio.get_event_loop().run_in_executor(None, parse_query_with_claude, user_text),
             timeout=10.0
@@ -136,10 +140,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not any(v for v in params.values() if v):
         await update.message.reply_text(
             "Не смог понять запрос 🤔\n\nПопробуй:\n"
-            "• *Найди контакты из Лента*\n"
-            "• *Михаил Иванов*\n"
-            "• *HR из Газпрома*",
-            parse_mode="Markdown"
+            "• Найди контакты из Лента\n"
+            "• Михаил Иванов\n"
+            "• HR из Газпрома"
         )
         return
 
@@ -148,18 +151,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not results:
         await update.message.reply_text(
-            f"😔 По запросу *\"{user_text}\"* ничего не найдено.\n\n"
-            "Попробуй изменить запрос или проверь написание.",
-            parse_mode="Markdown"
+            f"😔 По запросу \"{user_text}\" ничего не найдено.\n\n"
+            "Попробуй изменить запрос или проверь написание."
         )
         return
 
     total = len(results)
-    header = f"✅ Найдено: *{total}* контакт{'ов' if total != 1 else ''}:\n\n"
+    await update.message.reply_text(f"✅ Найдено: {total} контактов:")
 
-    # Отправляем все контакты по частям (Telegram лимит 4096 символов)
-    await update.message.reply_text(header, parse_mode="Markdown")
-    
     batch = ""
     for i, c in enumerate(results):
         card = format_contact(c, i+1) + "\n\n---\n\n"
@@ -168,12 +167,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             batch = card
         else:
             batch += card
-    
+
     if batch:
         await update.message.reply_text(batch, parse_mode="Markdown")
 
 async def post_init(app):
-    """Загружаем базу при старте бота."""
     logger.info("Загружаю базу при старте...")
     try:
         get_contacts()
